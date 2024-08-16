@@ -9,6 +9,7 @@ cap = cv2.VideoCapture(0)
 # Curl counter variables
 counter = 0 
 stage = None
+
 def calculate_angle(a,b,c):
     a = np.array(a) # First
     b = np.array(b) # Mid
@@ -18,9 +19,9 @@ def calculate_angle(a,b,c):
     angle = np.abs(radians*180.0/np.pi)
     
     if angle >180.0:
-        angle = 360-angle
-        
+        angle = 360-angle        
     return angle 
+
 ## Setup mediapipe instance
 with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
     while cap.isOpened():
