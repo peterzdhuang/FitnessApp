@@ -1,14 +1,20 @@
+from flask import Flask, jsonify, Response
 import cv2
 import mediapipe as mp
 import numpy as np
+
+
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
+
+app = Flask(__name__)
 
 cap = cv2.VideoCapture(0)
 
 # Curl counter variables
 counter = 0 
 stage = None
+
 def calculate_angle(a,b,c):
     a = np.array(a) # First
     b = np.array(b) # Mid
@@ -18,18 +24,57 @@ def calculate_angle(a,b,c):
     angle = np.abs(radians*180.0/np.pi)
     
     if angle >180.0:
-        angle = 360-angle
-        
+        angle = 360-angle        
     return angle 
-## Setup mediapipe instance
-with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
+
+#Dric - refactoring old runtime code, adding a flask route for the expo frontend
+@app.route('/detect', methods=['GET']) 
+def detect_pushups():
+    global counter, stage
+    
+    with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
+        if cap.isOpened():
+            ret, frame = cap.read()
+            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            image.flags.writeable = False
+            results = pose.process(image)
+            image.flags.writeable = True
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            
+            try:
+                landmarks = results.pose_landmarks.landmark
+                shoulder = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y]
+                elbow = [landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].y]
+                wrist = [landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x, landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y]
+                
+                angle = calculate_angle(shoulder, elbow, wrist)
+                
+                if angle > 160:
+                    stage = "down"
+                if angle < 30 and stage == 'down':
+                    stage = "up"
+                    counter += 1
+                    
+                return jsonify({"counter": counter, "stage": stage})
+            
+            except:
+                return jsonify({"error": "Pose not detected"})
+    
+    return jsonify({"error": "Camera not accessible"})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
+
+         
+"""
+legacy code by Peter Huang 
     while cap.isOpened():
         ret, frame = cap.read()
         
         # Recolor image to RGB
         image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         image.flags.writeable = False
-      
+    
         # Make detection
         results = pose.process(image)
     
@@ -51,8 +96,8 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
             
             # Visualize angle
             cv2.putText(image, str(angle), 
-                           tuple(np.multiply(elbow, [640, 480]).astype(int)), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2, cv2.LINE_AA
+                        tuple(np.multiply(elbow, [640, 480]).astype(int)), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2, cv2.LINE_AA
                                 )
             
             # Curl counter logic
@@ -62,7 +107,7 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
                 stage="up"
                 counter +=1
                 print(counter)
-                       
+                    
         except:
             pass
         
@@ -89,7 +134,7 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
         mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
                                 mp_drawing.DrawingSpec(color=(245,117,66), thickness=2, circle_radius=2), 
                                 mp_drawing.DrawingSpec(color=(245,66,230), thickness=2, circle_radius=2) 
-                                 )               
+                                )               
         
         cv2.imshow('Mediapipe Feed', image)
 
@@ -98,6 +143,4 @@ with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as 
 
     cap.release()
     cv2.destroyAllWindows()
-
-
-    
+"""
